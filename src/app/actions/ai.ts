@@ -1,5 +1,4 @@
-"use server";
-;
+
 
 import { generateContent, extractFromPDF } from "@/lib/gemini";
 
