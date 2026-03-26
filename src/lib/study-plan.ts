@@ -1,6 +1,6 @@
 import { StudyPlanItem } from "@/types";
 
-export function generateStudyPlan(answers: any, studentId: string): StudyPlanItem[] {
+export function generateStudyPlan(answers: Record<string, string>, studentId: string): StudyPlanItem[] {
   const plan: StudyPlanItem[] = [];
   const startDate = new Date();
 

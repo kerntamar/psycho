@@ -37,7 +37,7 @@ const questions = [
   }
 ];
 
-export function DiagnosticQuestionnaire({ onComplete }: { onComplete: (results: any) => void }) {
+export function DiagnosticQuestionnaire({ onComplete }: { onComplete: (results: Record<string, string>) => void }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
 

@@ -11,11 +11,33 @@ export async function generateSimilarQuestions(questionId: string) {
   return JSON.parse(cleanResponse);
 }
 
-export async function processPDFUpload(pdfPath: string) {
-  // Logic to fetch PDF from Supabase and call Gemini
-  // const prompt = "Extract chapters, explanations, and practice questions from this PDF.";
-  // const result = await extractFromPDF(base64, prompt);
-  // ... process and save to DB
+export async function processPDFUpload(pdfBase64: string) {
+  const prompt = `
+    Analyze this psychometric study material PDF.
+    Extract the following information in a structured JSON format:
+    1. Lesson Title
+    2. Subject (one of: "math", "english", "hebrew", "vocabulary")
+    3. A simplified, student-friendly explanation of the core concept.
+    4. A set of 5 practice questions based on the content.
+
+    Each question should include:
+    - Content (the question text)
+    - 4 options (A, B, C, D)
+    - Correct Answer (the option text)
+    - Detailed explanation of the solution
+    - Difficulty level (1-5)
+
+    Return ONLY the JSON object.
+  `;
+
+  try {
+    const response = await extractFromPDF(pdfBase64, prompt);
+    const cleanResponse = response.replace(/```json\n?|\n?```/g, "").trim();
+    return { success: true, data: JSON.parse(cleanResponse) };
+  } catch (error) {
+    console.error("AI Extraction Error:", error);
+    return { success: false, error: "Failed to extract content from PDF" };
+  }
 }
 
 export async function simplifyExplanation(originalText: string) {

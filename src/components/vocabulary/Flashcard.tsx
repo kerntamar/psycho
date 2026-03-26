@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ChevronLeft, Volume2, Bookmark, Check, X } from "lucide-react";
+import { Volume2, Bookmark, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FlashcardProps {
@@ -43,7 +43,7 @@ export function Flashcard({ word, translation, example, onKnown, onUnknown }: Fl
           <h3 className="text-5xl font-black mb-8 tracking-tight">{translation}</h3>
           <div className="bg-indigo-700/50 p-6 rounded-2xl border border-indigo-400/30 backdrop-blur-sm">
             <p className="italic text-indigo-100 text-xl text-center leading-relaxed">
-              "{example}"
+              &quot;{example}&quot;
             </p>
           </div>
           <div className="mt-12 flex space-x-6 w-full">

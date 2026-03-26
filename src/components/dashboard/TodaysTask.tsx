@@ -1,9 +1,9 @@
-import { CheckCircle2, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 
 export function TodaysTask() {
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-      <h3 className="text-lg font-semibold text-slate-800 mb-4">Today's Recommended Task</h3>
+      <h3 className="text-lg font-semibold text-slate-800 mb-4">Today&apos;s Recommended Task</h3>
       <div className="flex items-center p-4 bg-indigo-50 rounded-lg border border-indigo-100">
         <div className="bg-indigo-600 p-2 rounded-md mr-4 text-white">
           <Clock className="w-5 h-5" />

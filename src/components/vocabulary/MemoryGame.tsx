@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Sparkles, Trophy, RotateCcw } from "lucide-react";
 
@@ -12,22 +12,22 @@ interface Card {
   isMatched: boolean;
 }
 
+const initialPairs = [
+  { word: "Resilient", translation: "חסין" },
+  { word: "Coherent", translation: "עקבי" },
+  { word: "Pragmatic", translation: "מעשי" },
+  { word: "Diligent", translation: "חרוץ" },
+  { word: "Eloquent", translation: "רהוט" },
+  { word: "Tenacious", translation: "עיקש" },
+];
+
 export function MemoryGame() {
   const [cards, setCards] = useState<Card[]>([]);
   const [flippedCards, setFlippedCards] = useState<number[]>([]);
   const [matches, setMatches] = useState(0);
   const [moves, setMoves] = useState(0);
 
-  const initialPairs = [
-    { word: "Resilient", translation: "חסין" },
-    { word: "Coherent", translation: "עקבי" },
-    { word: "Pragmatic", translation: "מעשי" },
-    { word: "Diligent", translation: "חרוץ" },
-    { word: "Eloquent", translation: "רהוט" },
-    { word: "Tenacious", translation: "עיקש" },
-  ];
-
-  const initGame = () => {
+  const initGame = useCallback(() => {
     const gameCards: Card[] = [];
     initialPairs.forEach((pair, index) => {
       gameCards.push(
@@ -39,11 +39,11 @@ export function MemoryGame() {
     setFlippedCards([]);
     setMatches(0);
     setMoves(0);
-  };
+  }, []);
 
   useEffect(() => {
     initGame();
-  }, []);
+  }, [initGame]);
 
   const handleCardClick = (id: number) => {
     if (flippedCards.length === 2 || cards.find(c => c.id === id)?.isMatched || cards.find(c => c.id === id)?.isFlipped) return;

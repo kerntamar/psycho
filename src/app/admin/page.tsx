@@ -1,11 +1,99 @@
 "use client";
 
-import { useState } from "react";
-import { Upload, CheckCircle, FileText, Plus, Database, Sparkles, MessageSquare, Save } from "lucide-react";
+import { useState, useRef } from "react";
+import { Upload, CheckCircle, FileText, Plus, Database, Sparkles, MessageSquare, Save, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
+import { uploadPDF } from "@/app/actions/upload";
+import { processPDFUpload } from "@/app/actions/ai";
+import { getPendingContent, approveContent, saveExtractedContent } from "@/app/actions/admin";
+
+interface Question {
+  id: string;
+  content: string;
+  options: string[];
+  correct_answer: string;
+  explanation: string;
+  difficulty: number;
+}
+
+interface Lesson {
+  id: string;
+  title: string;
+  explanation: string;
+  questions?: Question[];
+}
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<"uploads" | "approval" | "manual">("uploads");
+  const [pendingLessons, setPendingLessons] = useState<Lesson[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processStep, setProcessStep] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessing(true);
+    setProcessStep("Uploading PDF to storage...");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadResult = await uploadPDF(formData);
+      if (!uploadResult.success) throw new Error(uploadResult.error);
+
+      setProcessStep("AI analyzing document and extracting content...");
+
+      // Convert file to base64 for Gemini
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(",")[1];
+        const aiResult = await processPDFUpload(base64);
+
+        if (aiResult.success) {
+          setProcessStep("Saving extracted content to database...");
+          const saveResult = await saveExtractedContent(aiResult.data);
+
+          if (saveResult.success) {
+            setProcessStep("Content successfully extracted! Available in Approval tab.");
+            refreshPending();
+          } else {
+            setProcessStep("Extraction successful, but failed to save to DB.");
+          }
+          setTimeout(() => setIsProcessing(false), 2000);
+        } else {
+          setProcessStep("Error during AI extraction.");
+          setTimeout(() => setIsProcessing(false), 3000);
+        }
+      };
+    } catch (error) {
+      console.error(error);
+      setProcessStep("An error occurred during processing.");
+      setTimeout(() => setIsProcessing(false), 3000);
+    }
+  };
+
+  const refreshPending = async () => {
+    const data = await getPendingContent();
+    setPendingLessons(data);
+  };
+
+  useEffect(() => {
+    if (activeTab === "approval") {
+      refreshPending();
+    }
+  }, [activeTab]);
+
+  const handleApprove = async (id: string) => {
+    const result = await approveContent(id);
+    if (result.success) {
+      refreshPending();
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto py-12 px-6 space-y-12">
@@ -47,15 +135,34 @@ export default function AdminPage() {
 
       {activeTab === "uploads" && (
         <div className="animate-in fade-in slide-in-from-bottom-5 duration-500">
-          <div className="bg-white border-4 border-dashed border-slate-200 rounded-[3rem] p-24 text-center group hover:border-indigo-400 hover:bg-indigo-50/30 transition-all cursor-pointer">
+          <div
+            onClick={() => !isProcessing && fileInputRef.current?.click()}
+            className={cn(
+              "bg-white border-4 border-dashed border-slate-200 rounded-[3rem] p-24 text-center group transition-all",
+              isProcessing ? "opacity-50 cursor-not-allowed" : "hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer"
+            )}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+              accept=".pdf"
+            />
             <div className="bg-indigo-100 p-8 rounded-full inline-block mb-10 group-hover:scale-110 transition-transform shadow-lg shadow-indigo-100">
-               <Upload className="w-16 h-16 text-indigo-600" />
+               {isProcessing ? <Loader2 className="w-16 h-16 text-indigo-600 animate-spin" /> : <Upload className="w-16 h-16 text-indigo-600" />}
             </div>
-            <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Drop your PDF study materials here</h2>
-            <p className="text-slate-500 text-lg mb-12 max-w-md mx-auto">AI will automatically extract chapters, explanations, and practice questions.</p>
-            <button className="bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black text-xl hover:bg-indigo-700 transition-all shadow-xl active:scale-95 ring-4 ring-indigo-100">
-               Browse Files
-            </button>
+            <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">
+              {isProcessing ? "Processing Document..." : "Drop your PDF study materials here"}
+            </h2>
+            <p className="text-slate-500 text-lg mb-12 max-w-md mx-auto">
+              {isProcessing ? processStep : "AI will automatically extract chapters, explanations, and practice questions."}
+            </p>
+            {!isProcessing && (
+              <button className="bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black text-xl hover:bg-indigo-700 transition-all shadow-xl active:scale-95 ring-4 ring-indigo-100">
+                Browse Files
+              </button>
+            )}
           </div>
 
           <div className="mt-16 bg-white p-10 rounded-3xl border border-slate-100 shadow-sm">
@@ -83,26 +190,34 @@ export default function AdminPage() {
 
       {activeTab === "approval" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in fade-in slide-in-from-bottom-5 duration-500">
-           {[1, 2].map(i => (
-             <div key={i} className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-xl hover:shadow-2xl transition-all relative group">
+           {pendingLessons.length === 0 && (
+             <div className="col-span-full text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                <p className="text-slate-400 font-bold text-xl uppercase tracking-widest">No content pending approval</p>
+             </div>
+           )}
+           {pendingLessons.map(lesson => (
+             <div key={lesson.id} className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-xl hover:shadow-2xl transition-all relative group">
                 <div className="absolute top-8 right-8 flex space-x-3">
                    <button className="bg-red-50 text-red-600 p-4 rounded-2xl hover:bg-red-100 transition-colors">
                       <Plus className="w-6 h-6 rotate-45" />
                    </button>
-                   <button className="bg-green-50 text-green-600 p-4 rounded-2xl hover:bg-green-100 transition-colors">
+                   <button
+                    onClick={() => handleApprove(lesson.id)}
+                    className="bg-green-50 text-green-600 p-4 rounded-2xl hover:bg-green-100 transition-colors"
+                   >
                       <CheckCircle className="w-6 h-6" />
                    </button>
                 </div>
                 <div className="bg-orange-50 text-orange-600 px-5 py-2 rounded-full font-black tracking-[0.1em] text-xs inline-block mb-8 uppercase border border-orange-100">AI PROPOSED LESSON</div>
-                <h3 className="text-3xl font-black text-slate-900 mb-6 leading-tight tracking-tight">Algebra: Proportional Relationships</h3>
-                <div className="bg-slate-50 p-6 rounded-2xl mb-8 border border-slate-100 italic text-slate-600 text-lg leading-relaxed">
-                   "A ratio is a way of comparing two quantities. For example, if there are 3 boys and 5 girls in a class, the ratio of boys to girls is 3:5..."
+                <h3 className="text-3xl font-black text-slate-900 mb-6 leading-tight tracking-tight">{lesson.title}</h3>
+                <div className="bg-slate-50 p-6 rounded-2xl mb-8 border border-slate-100 italic text-slate-600 text-lg leading-relaxed line-clamp-3">
+                   &quot;{lesson.explanation}&quot;
                 </div>
                 <div className="flex items-center text-slate-400 font-bold uppercase tracking-widest text-xs mb-10 space-x-3">
-                   <FileText className="w-5 h-5" /> <span>Source: geometry_vol1.pdf • Page 12</span>
+                   <FileText className="w-5 h-5" /> <span>{lesson.questions?.length || 0} practice questions extracted</span>
                 </div>
                 <button className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-slate-800 transition-all flex items-center justify-center space-x-3 shadow-lg active:scale-95">
-                   <MessageSquare className="w-6 h-6" /> <span>Edit Explanation</span>
+                   <MessageSquare className="w-6 h-6" /> <span>Review & Edit</span>
                 </button>
              </div>
            ))}

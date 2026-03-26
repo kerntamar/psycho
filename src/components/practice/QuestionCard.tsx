@@ -64,7 +64,6 @@ export function QuestionCard({
       <div className="grid grid-cols-1 gap-5">
         {options?.map((option, index) => {
           const isSelected = selectedAnswer === option;
-          const showResult = isSubmitted && (isSelected || option === correctAnswer);
           const isOptionCorrect = option === correctAnswer;
 
           return (
