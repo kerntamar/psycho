@@ -1,4 +1,5 @@
 "use server";
+;
 
 import { Mistake } from "@/types";
 import { supabase } from "@/lib/supabase";
