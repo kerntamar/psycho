@@ -10,7 +10,7 @@ export async function uploadPDF(formData: FormData) {
 
   const fileName = `${Date.now()}-${file.name}`;
   const { data, error } = await supabase.storage
-    .from('study-materials')
+    .from('source-pdfs')
     .upload(fileName, file);
 
   if (error) {
@@ -26,7 +26,7 @@ export async function uploadPDF(formData: FormData) {
 
 export async function getPDFUrl(path: string) {
   const { data } = supabase.storage
-    .from('study-materials')
+    .from('source-pdfs')
     .getPublicUrl(path);
 
   return data.publicUrl;
