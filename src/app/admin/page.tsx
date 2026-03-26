@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, CheckCircle, FileText, Plus, Database, Sparkles, MessageSquare, Save, Loader2 } from "lucide-react";
+import { Upload, CheckCircle, FileText, Plus, Database, Sparkles, MessageSquare, Save, Loader2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect } from "react";
 import { uploadPDF } from "@/app/actions/upload";
@@ -25,8 +25,31 @@ interface Lesson {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<"uploads" | "approval" | "manual">("uploads");
+  const [activeTab, setActiveTab] = useState<"uploads" | "approval" | "manual" | "settings">("uploads");
   const [pendingLessons, setPendingLessons] = useState<Lesson[]>([]);
+  const [settings, setSettings] = useState({
+    supabaseUrl: "",
+    supabaseAnonKey: "",
+    geminiApiKey: ""
+  });
+
+  useEffect(() => {
+    const savedUrl = localStorage.getItem("NEXT_PUBLIC_SUPABASE_URL") || "";
+    const savedKey = localStorage.getItem("NEXT_PUBLIC_SUPABASE_ANON_KEY") || "";
+    const savedGemini = localStorage.getItem("NEXT_PUBLIC_GEMINI_API_KEY") || "";
+    setSettings({
+      supabaseUrl: savedUrl,
+      supabaseAnonKey: savedKey,
+      geminiApiKey: savedGemini
+    });
+  }, []);
+
+  const saveSettings = () => {
+    localStorage.setItem("NEXT_PUBLIC_SUPABASE_URL", settings.supabaseUrl);
+    localStorage.setItem("NEXT_PUBLIC_SUPABASE_ANON_KEY", settings.supabaseAnonKey);
+    localStorage.setItem("NEXT_PUBLIC_GEMINI_API_KEY", settings.geminiApiKey);
+    alert("Settings saved! Please refresh the page for changes to take effect.");
+  };
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +152,15 @@ export default function AdminPage() {
             )}
           >
             <Database className="w-4 h-4" /> <span>Manual Entry</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("settings")}
+            className={cn(
+              "px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center space-x-2",
+              activeTab === "settings" ? "bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            <Settings className="w-4 h-4" /> <span>Settings</span>
           </button>
         </div>
       </header>
@@ -256,6 +288,53 @@ export default function AdminPage() {
                  <Save className="w-8 h-8 group-hover:rotate-12 transition-transform" /> <span>Publish Question</span>
               </button>
            </form>
+        </div>
+      )}
+
+      {activeTab === "settings" && (
+        <div className="bg-white p-12 rounded-[3rem] border-2 border-slate-100 shadow-xl animate-in fade-in slide-in-from-bottom-5 duration-500">
+           <h3 className="text-2xl font-black mb-8 text-slate-800 tracking-tight">System Configuration</h3>
+           <div className="space-y-8">
+              <div className="space-y-3">
+                 <label htmlFor="supabaseUrl" className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Supabase URL</label>
+                 <input
+                    id="supabaseUrl"
+                    type="password"
+                    value={settings.supabaseUrl}
+                    onChange={(e) => setSettings({...settings, supabaseUrl: e.target.value})}
+                    className="w-full p-5 rounded-2xl border-2 border-slate-100 bg-slate-50 text-slate-800 font-bold focus:border-indigo-500 transition-colors shadow-sm"
+                    placeholder="https://your-project.supabase.co"
+                 />
+              </div>
+              <div className="space-y-3">
+                 <label htmlFor="supabaseAnonKey" className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Supabase Anon Key</label>
+                 <input
+                    id="supabaseAnonKey"
+                    type="password"
+                    value={settings.supabaseAnonKey}
+                    onChange={(e) => setSettings({...settings, supabaseAnonKey: e.target.value})}
+                    className="w-full p-5 rounded-2xl border-2 border-slate-100 bg-slate-50 text-slate-800 font-bold focus:border-indigo-500 transition-colors shadow-sm"
+                    placeholder="eyJh..."
+                 />
+              </div>
+              <div className="space-y-3">
+                 <label htmlFor="geminiApiKey" className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Gemini API Key</label>
+                 <input
+                    id="geminiApiKey"
+                    type="password"
+                    value={settings.geminiApiKey}
+                    onChange={(e) => setSettings({...settings, geminiApiKey: e.target.value})}
+                    className="w-full p-5 rounded-2xl border-2 border-slate-100 bg-slate-50 text-slate-800 font-bold focus:border-indigo-500 transition-colors shadow-sm"
+                    placeholder="AIza..."
+                 />
+              </div>
+              <button
+                onClick={saveSettings}
+                className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black text-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center space-x-4 active:scale-95 group"
+              >
+                 <Save className="w-8 h-8 group-hover:rotate-12 transition-transform" /> <span>Save Configuration</span>
+              </button>
+           </div>
         </div>
       )}
     </div>
