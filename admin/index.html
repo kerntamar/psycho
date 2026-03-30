@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin PDF Import</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+      main { max-width: 900px; margin: 2rem auto; padding: 1rem; }
+      .card { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+      label { display: block; margin-top: .75rem; font-size: .9rem; }
+      input, select, textarea, button { width: 100%; margin-top: .35rem; padding: .65rem; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
+      button { background: #2563eb; border: none; font-weight: 600; cursor: pointer; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      pre { white-space: pre-wrap; background: #020617; padding: .75rem; border-radius: 8px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.mjs" type="module"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Admin PDF Import</h1>
+      <p>Upload a PDF, extract text locally, and trigger AI ingestion into Supabase.</p>
+
+      <div class="card">
+        <h2>Supabase</h2>
+        <label>Supabase URL <input id="supabaseUrl" placeholder="https://xxxx.supabase.co" /></label>
+        <label>Supabase Anon Key <textarea id="supabaseAnon" rows="3" placeholder="Paste anon key"></textarea></label>
+      </div>
+
+      <div class="card">
+        <h2>Document</h2>
+        <label>Title <input id="title" placeholder="סימולציה קמפוס 1" /></label>
+        <div class="row">
+          <label>Doc Type
+            <select id="docType">
+              <option value="simulation">simulation</option>
+              <option value="simulation_solution">simulation_solution</option>
+              <option value="course_book">course_book</option>
+              <option value="full_solution">full_solution</option>
+              <option value="auxiliary">auxiliary</option>
+            </select>
+          </label>
+          <label>Subject <input id="subject" placeholder="verbal / mixed" /></label>
+        </div>
+        <div class="row">
+          <label>Simulation Number <input id="simulationNumber" type="number" /></label>
+          <label>Language <input id="language" value="he" /></label>
+        </div>
+        <label>PDF File <input id="pdfFile" type="file" accept="application/pdf" /></label>
+      </div>
+
+      <div class="card">
+        <h2>AI</h2>
+        <div class="row">
+          <label>Provider
+            <select id="provider">
+              <option value="openai">openai</option>
+              <option value="gemini">gemini</option>
+            </select>
+          </label>
+          <label>Model <input id="model" placeholder="gpt-4.1-mini / gemini-1.5-flash" /></label>
+        </div>
+        <label>Pages to Parse <input id="pageLimit" type="number" value="6" min="1" max="30" /></label>
+      </div>
+
+      <button id="runBtn">Upload + Extract + Insert</button>
+      <pre id="log"></pre>
+    </main>
+
+    <script type="module">
+      import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.mjs';
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.mjs';
+
+      const byId = (id) => document.getElementById(id);
+      const logEl = byId('log');
+      const log = (msg) => { logEl.textContent += `${msg}\n`; };
+
+      async function extractPdfText(file, pageLimit) {
+        const bytes = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+        const maxPages = Math.min(pdf.numPages, pageLimit);
+        const pages = [];
+
+        for (let i = 1; i <= maxPages; i += 1) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const text = textContent.items.map((item) => item.str).join(' ').trim();
+          pages.push({ page_number: i, text });
+        }
+
+        return pages;
+      }
+
+      function makeSafeStoragePath(file) {
+        const ext = (file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normalized = file.name
+          .normalize('NFKD')
+          .replace(/[̀-ͯ]/g, '')
+          .replace(/[^a-zA-Z0-9._-]+/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '')
+          .toLowerCase();
+
+        const safeBase = normalized || 'document';
+        const timestamp = Date.now();
+        const rand = Math.random().toString(36).slice(2, 8);
+        return `uploads/${timestamp}-${rand}-${safeBase}.${ext || 'pdf'}`;
+      }
+
+      async function uploadPdfFile(supabase, file) {
+        const path = makeSafeStoragePath(file);
+        const { error: uploadErr } = await supabase.storage.from('source-pdfs').upload(path, file, { upsert: false });
+        if (uploadErr) throw uploadErr;
+        const { data } = supabase.storage.from('source-pdfs').getPublicUrl(path);
+        return { path, publicUrl: data.publicUrl };
+      }
+
+      byId('runBtn').addEventListener('click', async () => {
+        logEl.textContent = '';
+        const btn = byId('runBtn');
+        btn.disabled = true;
+
+        try {
+          const supabaseUrl = byId('supabaseUrl').value.trim();
+          const supabaseAnon = byId('supabaseAnon').value.trim();
+          const file = byId('pdfFile').files[0];
+          if (!supabaseUrl || !supabaseAnon || !file) throw new Error('Missing Supabase config or PDF file.');
+
+          const supabase = window.supabase.createClient(supabaseUrl, supabaseAnon);
+          const title = byId('title').value.trim() || file.name;
+          const docType = byId('docType').value;
+          const subject = byId('subject').value.trim() || null;
+          const simulationNumber = Number(byId('simulationNumber').value) || null;
+          const language = byId('language').value.trim() || 'he';
+          const provider = byId('provider').value;
+          const model = byId('model').value.trim();
+          const pageLimit = Number(byId('pageLimit').value || '6');
+
+          log('Uploading PDF to Supabase Storage (bucket: source-pdfs)...');
+          const uploaded = await uploadPdfFile(supabase, file);
+          log(`Uploaded: ${uploaded.publicUrl}`);
+
+          log('Extracting page text locally with PDF.js...');
+          const pages = await extractPdfText(file, pageLimit);
+          log(`Extracted ${pages.length} page(s).`);
+
+          log('Creating document_sources row...');
+          const { data: sourceRows, error: sourceErr } = await supabase
+            .from('document_sources')
+            .insert({
+              title,
+              url: uploaded.publicUrl,
+              filename: file.name,
+              doc_type: docType,
+              subject,
+              language,
+              simulation_number: simulationNumber,
+            })
+            .select('id')
+            .limit(1);
+
+          if (sourceErr) throw sourceErr;
+          const sourceId = sourceRows[0].id;
+          log(`Source created: ${sourceId}`);
+
+          log('Creating import_jobs row...');
+          const { data: jobRows, error: jobErr } = await supabase
+            .from('import_jobs')
+            .insert({ source_id: sourceId, status: 'queued', extractor_version: 'admin-v1' })
+            .select('id')
+            .limit(1);
+          if (jobErr) throw jobErr;
+          const jobId = jobRows[0].id;
+          log(`Job created: ${jobId}`);
+
+          log('Calling edge function extract-pdf...');
+          const { data: fnData, error: fnErr } = await supabase.functions.invoke('extract-pdf', {
+            body: {
+              source_id: sourceId,
+              job_id: jobId,
+              provider,
+              model,
+              pages,
+            },
+          });
+          if (fnErr) throw fnErr;
+          log(`Done: ${JSON.stringify(fnData, null, 2)}`);
+        } catch (err) {
+          log(`Error: ${err.message}`);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
