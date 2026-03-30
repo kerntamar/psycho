@@ -111,6 +111,9 @@
 
       async function uploadPdfFile(supabase, file) {
         const path = makeSafeStoragePath(file);
+      async function uploadPdfFile(supabase, file) {
+        const fileName = `${Date.now()}-${file.name}`;
+        const path = `uploads/${fileName}`;
         const { error: uploadErr } = await supabase.storage.from('source-pdfs').upload(path, file, { upsert: false });
         if (uploadErr) throw uploadErr;
         const { data } = supabase.storage.from('source-pdfs').getPublicUrl(path);
