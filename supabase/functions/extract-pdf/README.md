@@ -39,3 +39,26 @@ supabase secrets set OPENAI_API_KEY=... GEMINI_API_KEY=...
 - The admin page now stores Supabase URL + anon key once in browser localStorage.
 - For one-time source onboarding, use the **Bulk Source Seed** section in `admin/index.html`
   and paste CSV lines (`"Title","URL"`) to insert `document_sources` and queue jobs.
+
+## Bulk auto-processing queued jobs
+
+For one-time source onboarding, use the local worker script that reads queued `import_jobs`,
+downloads PDFs, extracts text, and calls this edge function automatically.
+
+### Setup
+
+```bash
+npm install
+```
+
+### Run worker
+
+```bash
+SUPABASE_URL=... \
+SUPABASE_SERVICE_ROLE_KEY=... \
+PROCESS_BATCH_SIZE=5 \
+EXTRACT_PROVIDER=openai \
+EXTRACT_MODEL=gpt-4.1-mini \
+PAGE_LIMIT=12 \
+npm run process:queued
+```
