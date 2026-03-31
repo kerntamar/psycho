@@ -7,7 +7,6 @@
     <style>
       body { font-family: Inter, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
       main { max-width: 980px; margin: 2rem auto; padding: 1rem; }
-      main { max-width: 900px; margin: 2rem auto; padding: 1rem; }
       .card { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
       label { display: block; margin-top: .75rem; font-size: .9rem; }
       input, select, textarea, button { width: 100%; margin-top: .35rem; padding: .65rem; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
@@ -40,16 +39,6 @@
 
       <div class="card">
         <h2>Single PDF Upload + AI Extract</h2>
-      <p>Upload a PDF, extract text locally, and trigger AI ingestion into Supabase.</p>
-
-      <div class="card">
-        <h2>Supabase</h2>
-        <label>Supabase URL <input id="supabaseUrl" placeholder="https://xxxx.supabase.co" /></label>
-        <label>Supabase Anon Key <textarea id="supabaseAnon" rows="3" placeholder="Paste anon key"></textarea></label>
-      </div>
-
-      <div class="card">
-        <h2>Document</h2>
         <label>Title <input id="title" placeholder="סימולציה קמפוס 1" /></label>
         <div class="row">
           <label>Doc Type
@@ -70,10 +59,6 @@
         <label>PDF File <input id="pdfFile" type="file" accept="application/pdf" /></label>
 
         <h3>AI</h3>
-      </div>
-
-      <div class="card">
-        <h2>AI</h2>
         <div class="row">
           <label>Provider
             <select id="provider">
@@ -107,9 +92,6 @@
         <button id="bulkSeedBtn" class="btn-secondary">Insert Sources + Queue Jobs</button>
       </div>
 
-      </div>
-
-      <button id="runBtn">Upload + Extract + Insert</button>
       <pre id="log"></pre>
     </main>
 
@@ -166,7 +148,6 @@
         const normalized = file.name
           .normalize('NFKD')
           .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[̀-ͯ]/g, '')
           .replace(/[^a-zA-Z0-9._-]+/g, '-')
           .replace(/-+/g, '-')
           .replace(/^-|-$/g, '')
@@ -180,9 +161,6 @@
 
       async function uploadPdfFile(supabase, file) {
         const path = makeSafeStoragePath(file);
-      async function uploadPdfFile(supabase, file) {
-        const fileName = `${Date.now()}-${file.name}`;
-        const path = `uploads/${fileName}`;
         const { error: uploadErr } = await supabase.storage.from('source-pdfs').upload(path, file, { upsert: false });
         if (uploadErr) throw uploadErr;
         const { data } = supabase.storage.from('source-pdfs').getPublicUrl(path);
@@ -232,12 +210,6 @@
           if (!file) throw new Error('Missing PDF file.');
 
           const supabase = window.supabase.createClient(cfg.url, cfg.anon);
-          const supabaseUrl = byId('supabaseUrl').value.trim();
-          const supabaseAnon = byId('supabaseAnon').value.trim();
-          const file = byId('pdfFile').files[0];
-          if (!supabaseUrl || !supabaseAnon || !file) throw new Error('Missing Supabase config or PDF file.');
-
-          const supabase = window.supabase.createClient(supabaseUrl, supabaseAnon);
           const title = byId('title').value.trim() || file.name;
           const docType = byId('docType').value;
           const subject = byId('subject').value.trim() || null;
@@ -278,7 +250,6 @@
           const { data: jobRows, error: jobErr } = await supabase
             .from('import_jobs')
             .insert({ source_id: sourceId, status: 'queued', extractor_version: 'admin-v2' })
-            .insert({ source_id: sourceId, status: 'queued', extractor_version: 'admin-v1' })
             .select('id')
             .limit(1);
           if (jobErr) throw jobErr;
