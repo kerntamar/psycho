@@ -33,3 +33,9 @@ supabase secrets set OPENAI_API_KEY=... GEMINI_API_KEY=...
   "pages": [{ "page_number": 1, "text": "..." }]
 }
 ```
+
+## Admin UI usage notes
+
+- The admin page now stores Supabase URL + anon key once in browser localStorage.
+- For one-time source onboarding, use the **Bulk Source Seed** section in `admin/index.html`
+  and paste CSV lines (`"Title","URL"`) to insert `document_sources` and queue jobs.

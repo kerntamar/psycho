@@ -6,6 +6,7 @@
     <title>Admin PDF Import</title>
     <style>
       body { font-family: Inter, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+      main { max-width: 980px; margin: 2rem auto; padding: 1rem; }
       main { max-width: 900px; margin: 2rem auto; padding: 1rem; }
       .card { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
       label { display: block; margin-top: .75rem; font-size: .9rem; }
@@ -14,6 +15,9 @@
       button:disabled { opacity: .5; cursor: not-allowed; }
       pre { white-space: pre-wrap; background: #020617; padding: .75rem; border-radius: 8px; }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+      .muted { color: #94a3b8; font-size: .85rem; }
+      .btn-secondary { background: #334155; }
+      .stack { display: flex; gap: .5rem; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.mjs" type="module"></script>
@@ -21,6 +25,21 @@
   <body>
     <main>
       <h1>Admin PDF Import</h1>
+      <p>One-time setup: save Supabase config once, then run single uploads or bulk source seeding.</p>
+
+      <div class="card">
+        <h2>One-time Supabase Setup</h2>
+        <label>Supabase URL <input id="supabaseUrl" placeholder="https://xxxx.supabase.co" /></label>
+        <label>Supabase Anon Key <textarea id="supabaseAnon" rows="3" placeholder="Paste anon key once"></textarea></label>
+        <div class="stack">
+          <button id="saveConfigBtn" class="btn-secondary">Save Setup Locally</button>
+          <button id="clearConfigBtn" class="btn-secondary">Clear Saved Setup</button>
+        </div>
+        <p class="muted">Saved in browser localStorage on this machine only.</p>
+      </div>
+
+      <div class="card">
+        <h2>Single PDF Upload + AI Extract</h2>
       <p>Upload a PDF, extract text locally, and trigger AI ingestion into Supabase.</p>
 
       <div class="card">
@@ -49,6 +68,8 @@
           <label>Language <input id="language" value="he" /></label>
         </div>
         <label>PDF File <input id="pdfFile" type="file" accept="application/pdf" /></label>
+
+        <h3>AI</h3>
       </div>
 
       <div class="card">
@@ -63,6 +84,29 @@
           <label>Model <input id="model" placeholder="gpt-4.1-mini / gemini-1.5-flash" /></label>
         </div>
         <label>Pages to Parse <input id="pageLimit" type="number" value="6" min="1" max="30" /></label>
+
+        <button id="runBtn">Upload + Extract + Insert</button>
+      </div>
+
+      <div class="card">
+        <h2>Bulk Source Seed (No File Upload)</h2>
+        <p class="muted">Paste CSV-style lines: <code>"Title","URL"</code>. Only PDF URLs are queued.</p>
+        <textarea id="bulkList" rows="10" placeholder='"סימולציה קמפוס 1","https://...pdf"'></textarea>
+        <div class="row">
+          <label>Default Doc Type
+            <select id="bulkDocType">
+              <option value="auxiliary">auxiliary</option>
+              <option value="simulation">simulation</option>
+              <option value="simulation_solution">simulation_solution</option>
+              <option value="course_book">course_book</option>
+              <option value="full_solution">full_solution</option>
+            </select>
+          </label>
+          <label>Default Language <input id="bulkLanguage" value="he" /></label>
+        </div>
+        <button id="bulkSeedBtn" class="btn-secondary">Insert Sources + Queue Jobs</button>
+      </div>
+
       </div>
 
       <button id="runBtn">Upload + Extract + Insert</button>
@@ -76,6 +120,30 @@
       const byId = (id) => document.getElementById(id);
       const logEl = byId('log');
       const log = (msg) => { logEl.textContent += `${msg}\n`; };
+      const KEY_URL = 'psycho_supabase_url';
+      const KEY_ANON = 'psycho_supabase_anon';
+
+      function loadSavedConfig() {
+        const savedUrl = localStorage.getItem(KEY_URL);
+        const savedAnon = localStorage.getItem(KEY_ANON);
+        if (savedUrl) byId('supabaseUrl').value = savedUrl;
+        if (savedAnon) byId('supabaseAnon').value = savedAnon;
+      }
+
+      function saveConfig() {
+        const url = byId('supabaseUrl').value.trim();
+        const anon = byId('supabaseAnon').value.trim();
+        if (!url || !anon) throw new Error('Both Supabase URL and Anon key are required.');
+        localStorage.setItem(KEY_URL, url);
+        localStorage.setItem(KEY_ANON, anon);
+      }
+
+      function getConfig() {
+        const url = byId('supabaseUrl').value.trim() || localStorage.getItem(KEY_URL) || '';
+        const anon = byId('supabaseAnon').value.trim() || localStorage.getItem(KEY_ANON) || '';
+        if (!url || !anon) throw new Error('Missing Supabase setup. Save URL + Anon key first.');
+        return { url, anon };
+      }
 
       async function extractPdfText(file, pageLimit) {
         const bytes = await file.arrayBuffer();
@@ -97,6 +165,7 @@
         const ext = (file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '');
         const normalized = file.name
           .normalize('NFKD')
+          .replace(/[\u0300-\u036f]/g, '')
           .replace(/[̀-ͯ]/g, '')
           .replace(/[^a-zA-Z0-9._-]+/g, '-')
           .replace(/-+/g, '-')
@@ -120,12 +189,49 @@
         return { path, publicUrl: data.publicUrl };
       }
 
+      function parseBulkLines(raw) {
+        return raw
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const m = line.match(/^\s*"?(.*?)"?\s*,\s*"?(https?:\/\/[^"\s]+)"?\s*$/);
+            if (!m) return null;
+            return { title: m[1] || 'Untitled', url: m[2] };
+          })
+          .filter(Boolean)
+          .filter((row) => row.url.toLowerCase().includes('.pdf'));
+      }
+
+      byId('saveConfigBtn').addEventListener('click', () => {
+        try {
+          saveConfig();
+          log('Supabase setup saved locally.');
+        } catch (err) {
+          log(`Error: ${err.message}`);
+        }
+      });
+
+      byId('clearConfigBtn').addEventListener('click', () => {
+        localStorage.removeItem(KEY_URL);
+        localStorage.removeItem(KEY_ANON);
+        byId('supabaseUrl').value = '';
+        byId('supabaseAnon').value = '';
+        log('Saved setup cleared.');
+      });
+
       byId('runBtn').addEventListener('click', async () => {
         logEl.textContent = '';
         const btn = byId('runBtn');
         btn.disabled = true;
 
         try {
+          saveConfig();
+          const cfg = getConfig();
+          const file = byId('pdfFile').files[0];
+          if (!file) throw new Error('Missing PDF file.');
+
+          const supabase = window.supabase.createClient(cfg.url, cfg.anon);
           const supabaseUrl = byId('supabaseUrl').value.trim();
           const supabaseAnon = byId('supabaseAnon').value.trim();
           const file = byId('pdfFile').files[0];
@@ -171,6 +277,7 @@
           log('Creating import_jobs row...');
           const { data: jobRows, error: jobErr } = await supabase
             .from('import_jobs')
+            .insert({ source_id: sourceId, status: 'queued', extractor_version: 'admin-v2' })
             .insert({ source_id: sourceId, status: 'queued', extractor_version: 'admin-v1' })
             .select('id')
             .limit(1);
@@ -196,6 +303,56 @@
           btn.disabled = false;
         }
       });
+
+      byId('bulkSeedBtn').addEventListener('click', async () => {
+        logEl.textContent = '';
+        const btn = byId('bulkSeedBtn');
+        btn.disabled = true;
+
+        try {
+          saveConfig();
+          const cfg = getConfig();
+          const supabase = window.supabase.createClient(cfg.url, cfg.anon);
+
+          const rows = parseBulkLines(byId('bulkList').value);
+          if (!rows.length) throw new Error('No valid PDF lines found in bulk input.');
+
+          const docType = byId('bulkDocType').value;
+          const language = byId('bulkLanguage').value.trim() || 'he';
+
+          log(`Parsed ${rows.length} PDF source(s). Inserting...`);
+
+          for (const row of rows) {
+            const { data: sourceRows, error: sourceErr } = await supabase
+              .from('document_sources')
+              .upsert({
+                title: row.title,
+                url: row.url,
+                filename: row.url.split('/').pop() || null,
+                doc_type: docType,
+                language,
+              }, { onConflict: 'url' })
+              .select('id')
+              .limit(1);
+
+            if (sourceErr) throw sourceErr;
+            const sourceId = sourceRows[0].id;
+
+            const { error: jobErr } = await supabase
+              .from('import_jobs')
+              .insert({ source_id: sourceId, status: 'queued', extractor_version: 'bulk-seed-v1' });
+            if (jobErr) throw jobErr;
+          }
+
+          log('Bulk source seed complete. Jobs queued successfully.');
+        } catch (err) {
+          log(`Error: ${err.message}`);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      loadSavedConfig();
     </script>
   </body>
 </html>
