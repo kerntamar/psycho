@@ -102,6 +102,10 @@
       const byId = (id) => document.getElementById(id);
       const logEl = byId('log');
       const log = (msg) => { logEl.textContent += `${msg}\n`; };
+      const notifyError = (msg) => {
+        log(`Error: ${msg}`);
+        window.alert(msg);
+      };
       const KEY_URL = 'psycho_supabase_url';
       const KEY_ANON = 'psycho_supabase_anon';
 
@@ -186,6 +190,7 @@
           saveConfig();
           log('Supabase setup saved locally.');
         } catch (err) {
+          notifyError(err.message);
           log(`Error: ${err.message}`);
         }
       });
@@ -269,6 +274,7 @@
           if (fnErr) throw fnErr;
           log(`Done: ${JSON.stringify(fnData, null, 2)}`);
         } catch (err) {
+          notifyError(err.message);
           log(`Error: ${err.message}`);
         } finally {
           btn.disabled = false;
@@ -317,10 +323,15 @@
 
           log('Bulk source seed complete. Jobs queued successfully.');
         } catch (err) {
+          notifyError(err.message);
           log(`Error: ${err.message}`);
         } finally {
           btn.disabled = false;
         }
+      });
+
+      window.addEventListener('error', (event) => {
+        notifyError(`Runtime error: ${event.message}`);
       });
 
       loadSavedConfig();
