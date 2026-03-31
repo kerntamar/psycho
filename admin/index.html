@@ -191,6 +191,7 @@
           log('Supabase setup saved locally.');
         } catch (err) {
           notifyError(err.message);
+          log(`Error: ${err.message}`);
         }
       });
 
@@ -274,6 +275,7 @@
           log(`Done: ${JSON.stringify(fnData, null, 2)}`);
         } catch (err) {
           notifyError(err.message);
+          log(`Error: ${err.message}`);
         } finally {
           btn.disabled = false;
         }
@@ -322,6 +324,7 @@
           log('Bulk source seed complete. Jobs queued successfully.');
         } catch (err) {
           notifyError(err.message);
+          log(`Error: ${err.message}`);
         } finally {
           btn.disabled = false;
         }
