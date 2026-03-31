@@ -1,0 +1,12 @@
+{
+  "name": "psycho-ingestion-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "process:queued": "node scripts/process_queued_jobs.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "pdf-parse": "^1.1.1"
+  }
+}
